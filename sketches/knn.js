@@ -9,7 +9,7 @@ const settings = {
 
 const params = {
   numPoints: 20,
-  k: 7
+  k: 1
 }
 
 const dotLT = (A, x) => {
@@ -45,7 +45,7 @@ const generatePoints2D = (width, height, mean, variance) => {
 
 const drawPoint = (context, point, colour) => {
   context.save();
-  context.fillStyle = colour;
+  context.fillStyle = point.cls === "2" ? "black" : "white";
   context.translate(point.x, point.y);
   context.beginPath();
   context.arc(0, 0, 3, 0, 2 * Math.PI);
@@ -111,10 +111,8 @@ const addKClosest = (cs, point, k) => {
   }
 }
 
-const knn = (x, points, k, closest) => {
-  if(closest === undefined) {
-    closest = [];               //the list of K-closest points
-  }
+const knn = (x, points, k) => {
+  let closest = [];               //the list of K-closest points
   points.forEach((point) => {
     const distance = point.distance(x);
     const c = new Closest(point, distance);
@@ -158,16 +156,15 @@ const sketch = () => {
 
     const topLeft = new Point(0, 0);
     const bottomRight = new Point(width, height);
-    let points1 = [];
-    let points2 = [];
+    let points = [];
     for(let i = 0; i < params.numPoints; ++i) {
       const point1 = generatePoints2D(width, height, mean1, var1);
       if(point1.containedIn(topLeft, bottomRight)) {
-        points1.push(new ClassPoint(point1.x, point1.y, "1"));
+        points.push(new ClassPoint(point1.x, point1.y, "1"));
       }
       const point2 = generatePoints2D(width, height, mean2, var2);
       if(point2.containedIn(topLeft, bottomRight)) {
-        points2.push(new ClassPoint(point2.x, point2.y, "2"));
+        points.push(new ClassPoint(point2.x, point2.y, "2"));
       }
     }
 
@@ -175,9 +172,7 @@ const sketch = () => {
       for(let i = 0; i < height; ++i) {
         for(let j = 0; j < width; ++j) {
           const point = new Point(i, j);
-          let closest = [];
-          closest = knn(point, points2, k, closest);
-          closest = knn(point, points1, k, closest);
+          const closest = knn(point, points, k);
 
           const cls = classFromKnn(closest);
           if(cls === "1") {
@@ -196,10 +191,7 @@ const sketch = () => {
       }
     }
 
-    points1.forEach((p) => {
-      drawPoint(context, p, "black");
-    });
-    points2.forEach((p) => {
+    points.forEach((p) => {
       drawPoint(context, p, "white");
     });
   };
