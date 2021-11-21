@@ -1,15 +1,15 @@
 const canvasSketch = require('canvas-sketch');
 import {random} from "canvas-sketch-util"
 import math from "canvas-sketch-util/math";
-import { convertToSVGPath } from "canvas-sketch-util/penplot";
-const cholesky = require('cholesky')
+const _ = require("lodash");
 
 const settings = {
-  dimensions: [ 1080 / 3, 1080 / 3 ]
+  dimensions: [ 1080 / 5, 1080 / 5 ]
 };
 
 const params = {
-  numPoints: 50,
+  numPoints: 100,
+  k: 31
 }
 
 const dotLT = (A, x) => {
@@ -24,7 +24,11 @@ const dotLT = (A, x) => {
   return y;
 }
 
-const generatePoints2D = (width, height, variance) => {
+const addV = (x, y) => {
+  return _.zip(x, y).map(_.sum);
+}
+
+const generatePoints2D = (width, height, mean, variance) => {
   const transform = (u1, u2, trigFunc) => {
     return Math.sqrt(-2 * Math.log(u1)) * trigFunc(2 * Math.PI * u2);
   }
@@ -34,18 +38,15 @@ const generatePoints2D = (width, height, variance) => {
   const z0 = transform(r1, r2, Math.cos);
   const z1 = transform(r1, r2, Math.sin);
 
-  const L = cholesky(variance);
-
-  return dotLT(variance, [z0, z1]);
+  return addV(mean, dotLT(variance, [z0, z1]));
 };
 
-const drawPoint = (context, point, mean, colour) => {
+const drawPoint = (context, point, colour) => {
   context.save();
   context.fillStyle = colour;
-  context.translate(mean[0], mean[1]);
   context.translate(point[0], point[1]);
   context.beginPath();
-  context.arc(0, 0, 10, 0, 2 * Math.PI);
+  context.arc(0, 0, 5, 0, 2 * Math.PI);
   context.fill();
   context.restore();
 }
@@ -57,7 +58,7 @@ class Closest {
     // the distance it is
     this.d = d;
     // the class it is
-    this.class = c;
+    this.c = c;
   }
 
   compare(that) {
@@ -72,7 +73,7 @@ class Closest {
 };
 
 const dist = (p1, p2) => {
-  return Math.sqrt((p1[0] - p2[0])**2 + (p1[0] - p2[0]));
+  return Math.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2);
 }
 
 // cs is a list of Closest, we want to potentially add p to it, so it is less than k
@@ -80,19 +81,45 @@ const dist = (p1, p2) => {
 const addKClosest = (cs, p, k) => {
   if(cs.length < k) {
     cs.push(p)
-  } else if (p.distance < cs[cs.length - 1]) {
+  } else if (p.d < cs[cs.length - 1].d) {
     cs[cs.length - 1] = p;
-
     cs.sort((c1, c2) => c1.compare(c2));
   }
 }
 
-const knn = (x, points, k) => {
-  let closest = [];
+const knn = (x, points, k, cls, closest) => {
+  if(closest === undefined) {
+    closest = [];               //the list of K-closest points
+  }
   points.forEach((p) => {
     const distance = dist(p, x);
-
+    const c = new Closest(p, distance, cls);
+    addKClosest(closest, c, k);
   });
+
+  return closest;
+}
+
+const classFromKnnDebug = (cosest) => {
+  const count = _.countBy(cosest.map((x) => x.c));
+  return _(count)
+          .entries()
+          .maxBy(_.last)[0];
+
+}
+
+const classFromKnn = (cosest) => {
+  const count = _.countBy(cosest.map((x) => x.c));
+  return _(count)
+          .entries()
+          .maxBy(_.last)[0];
+
+}
+
+const classToColour = {"1": "red", "2": "red"}
+
+const inBounds = (p, w, h) => {
+  return p[0] >= 0 && p[0] < h && p[1] > 0 && p[1] < w;
 }
 
 const sketch = () => {
@@ -100,21 +127,54 @@ const sketch = () => {
     context.fillStyle = 'white';
     context.fillRect(0, 0, width, height);
 
-    const mean1 = [width / 3, height / 3];
-    const mean2 = [2 * width / 3, 2 * height / 3];
+    const mean1 = [4 * width / 10, 4 * height / 10];
+    const mean2 = [6 * width / 10, 6 * height / 10];
+    const var1 = [[width/ 3, 1], [10, width/ 3]];
+    const var2 = [[width/ 3, 1], [10, width/ 3]];
 
     let points1 = [];
     let points2 = [];
     for(let i = 0; i < params.numPoints; ++i) {
-      points1.push(generatePoints2D(width, height, [[100, 1], [10, 100]]));
-      points2.push(generatePoints2D(width, height, [[100, 1], [10, 100]]));
+      const point1 = generatePoints2D(width, height, mean1, var1);
+      if(inBounds(point1, width, height)) {
+        points1.push(point1);
+      }
+      const point2 = generatePoints2D(width, height, mean2, var2);
+      if(inBounds(point2, width, height)) {
+        points2.push(point2);
+      }
+    }
+
+    for(let k = params.k; k >= 1; k -= 2) {
+      console.log(k);
+      for(let i = 0; i < height; ++i) {
+        for(let j = 0; j < width; ++j) {
+          let closest = [];
+          closest = knn([i, j], points2, k, 2, closest);
+          closest = knn([i, j], points1, k, 1, closest);
+
+          const cls = classFromKnn(closest);
+          if(cls === "1") {
+            context.save();
+            context.globalAlpha = 2 * (1 / params.k);
+
+            context.translate(i, j);
+            context.fillStyle = classToColour[cls];
+            context.beginPath();
+            context.rect(0, 0, 1, 1);
+            context.fill();
+
+            context.restore();
+          }
+        }
+      }
     }
 
     points1.forEach((p) => {
-      drawPoint(context, p, mean1, "red");
+      // drawPoint(context, p, "red");
     });
     points2.forEach((p) => {
-      drawPoint(context, p, mean2, "green");
+      // drawPoint(context, p, "green");
     });
   };
 };
