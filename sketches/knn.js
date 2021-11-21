@@ -4,11 +4,11 @@ import math from "canvas-sketch-util/math";
 const _ = require("lodash");
 
 const settings = {
-  dimensions: [ 1080, 1080]
+  dimensions: [ 1080 / 3, 1080 / 3]
 };
 
 const params = {
-  numPoints: 100,
+  numPoints: 3,
   k: 1
 }
 
@@ -101,6 +101,15 @@ class BoundingBox {
     context.rect(this.p1.x, this.p1.y, this.p2.x - this.p1.x, this.p2.y - this.p1.y);
     context.stroke();
   }
+  
+  /**
+   * Calculate the longest possible distance we can get from point P and still be
+   * in the bounding box
+   * @param {Point} p 
+   */
+  longestDistance(p) {
+
+  }
 };
 
 class ClassPoint extends Point {
@@ -181,6 +190,21 @@ class QuadTree {
   draw(context) {
     this.bb.draw(context);
     this.children.forEach((el) => el.draw(context));
+  }
+}
+
+const findClosest = (p, qt) => {
+  let stack = [qt];
+  let best = qt.longestDistance(p);
+  while(stack.length > 0) {
+    const end = stack.pop();
+    if(end.bb.contains(p)) {
+      if(end.points.length == 1) {
+        return end.points[0];
+      } else {
+        stack.push(...end.points);
+      }
+    }
   }
 }
 
