@@ -4,11 +4,11 @@ import math from "canvas-sketch-util/math";
 const _ = require("lodash");
 
 const settings = {
-  dimensions: [ 1080 / 5, 1080 / 5 ]
+  dimensions: [ 1080, 1080]
 };
 
 const params = {
-  numPoints: 20,
+  numPoints: 100,
   k: 1
 }
 
@@ -43,9 +43,9 @@ const generatePoints2D = (width, height, mean, variance) => {
   return new Point(point[0], point[1]);
 };
 
-const drawPoint = (context, point, colour) => {
+const drawPoint = (context, point) => {
   context.save();
-  context.fillStyle = point.cls === "2" ? "black" : "white";
+  context.fillStyle = point.cls === "2" ? "black" : "yellow";
   context.translate(point.x, point.y);
   context.beginPath();
   context.arc(0, 0, 3, 0, 2 * Math.PI);
@@ -65,6 +65,41 @@ class Point {
 
   containedIn(p1, p2) {
     return this.x >= p1.x && this.x <= p2.x && this.y >= p1.y && this.y <= p2.y;
+  }
+};
+
+class BoundingBox {
+  constructor(p1, p2) {
+    this.p1 = p1;
+    this.p2 = p2;
+  }
+
+  contains(p) {
+    return this.p1.x <= p.x && p.x <= this.p2.x && this.p1.y <= p.y && p.y <= this.p2.y;
+  }
+
+  /**
+   * splits the bounding box into 4 euqal sub bounding boxes
+   * @returns a list of the new bounding boxes
+   */
+  split() {
+    const midX = (this.p2.x + this.p1.x) / 2;
+    const midY = (this.p2.y + this.p1.y) / 2;
+    const center = new Point(midX, midY);
+    // left-to-right top-to-bottom
+    const bb1 = new BoundingBox(this.p1, center)
+    const bb2 = new BoundingBox(new Point(midX, this.p1.y),
+                                new Point(this.p2.x, midY));
+    const bb3 = new BoundingBox(new Point(this.p1.x, midY),
+                                new Point(midX, this.p2.y));
+    const bb4 = new BoundingBox(center, this.p2);
+    return [bb1, bb2, bb3, bb4];
+  };
+
+  draw(context) {
+    context.beginPath();
+    context.rect(this.p1.x, this.p1.y, this.p2.x - this.p1.x, this.p2.y - this.p1.y);
+    context.stroke();
   }
 };
 
@@ -108,6 +143,44 @@ const addKClosest = (cs, point, k) => {
   } else if (point.d < cs[cs.length - 1].d) {
     cs[cs.length - 1] = point;
     cs.sort((c1, c2) => c1.compare(c2));
+  }
+}
+
+const constructQuadTrees = (points, bb) => {
+  const boundingBoxes = bb.split();
+  let splits = _.map(boundingBoxes, (b) => [b, []]);
+  splits = _.reduce(points, (arr, p) => {
+    for(let i = 0; i < arr.length; ++i) {
+      let bbox, points;
+      [bbox, points] = arr[i];
+      if(bbox.contains(p)) {
+        points.push(p);
+        break;
+      }
+    }
+    return arr;},
+    splits);
+
+    return _.map(splits, (split) => {
+      return new QuadTree(split[1], split[0]);
+    })
+};
+
+class QuadTree {
+  constructor(points, bb) {
+    this.points = points;
+    this.bb = bb;
+    if(this.points.length > 1) {
+      this.children = constructQuadTrees(this.points, this.bb);
+
+    } else {
+      this.children = [];
+    }
+  }
+
+  draw(context) {
+    this.bb.draw(context);
+    this.children.forEach((el) => el.draw(context));
   }
 }
 
@@ -156,17 +229,20 @@ const sketch = () => {
 
     const topLeft = new Point(0, 0);
     const bottomRight = new Point(width, height);
+    const boundingBox = new BoundingBox(topLeft, bottomRight);
     let points = [];
     for(let i = 0; i < params.numPoints; ++i) {
       const point1 = generatePoints2D(width, height, mean1, var1);
-      if(point1.containedIn(topLeft, bottomRight)) {
+      if(boundingBox.contains(point1)) {
         points.push(new ClassPoint(point1.x, point1.y, "1"));
       }
       const point2 = generatePoints2D(width, height, mean2, var2);
-      if(point2.containedIn(topLeft, bottomRight)) {
+      if(boundingBox.contains(point2)) {
         points.push(new ClassPoint(point2.x, point2.y, "2"));
       }
     }
+
+    const quadtree = new QuadTree(points, boundingBox);
 
     for(let k = params.k; k >= 1; k -= 2) {
       for(let i = 0; i < height; ++i) {
@@ -191,8 +267,10 @@ const sketch = () => {
       }
     }
 
+    quadtree.draw(context);
+    
     points.forEach((p) => {
-      drawPoint(context, p, "white");
+      drawPoint(context, p);
     });
   };
 };
