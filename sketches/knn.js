@@ -4,11 +4,11 @@ import math from "canvas-sketch-util/math";
 const _ = require("lodash");
 
 const settings = {
-  dimensions: [ 1080 / 3, 1080 / 3]
+  dimensions: [ 1080, 1080]
 };
 
 const params = {
-  numPoints: 3,
+  numPoints: 100,
   k: 1
 }
 
