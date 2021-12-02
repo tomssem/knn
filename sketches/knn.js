@@ -9,7 +9,7 @@ const settings = {
 
 const params = {
   numPoints: 100,
-  k: 1
+  k: 31
 }
 
 const dotLT = (A, x) => {
@@ -208,6 +208,22 @@ const findClosest = (p, qt) => {
   }
 }
 
+const proportion = (closest) => {
+  let prop = 0;
+  const fraction = 2 / closest.length;  // 2 because we only do odd numbers of k
+  let last = 0;
+  let portion = [];
+  for(let i = 1; i < closest.length; i += 2) {
+    portion = portion.concat(_.slice(closest, last, i));
+    last = i;
+    if(classFromKnn(portion) == "1") {
+      prop += fraction;
+    }
+  }
+
+  return prop;
+}
+
 const knn = (x, points, k) => {
   let closest = [];               //the list of K-closest points
   points.forEach((point) => {
@@ -268,34 +284,58 @@ const sketch = () => {
 
     const quadtree = new QuadTree(points, boundingBox);
 
-    for(let k = params.k; k >= 1; k -= 2) {
-      for(let i = 0; i < height; ++i) {
-        for(let j = 0; j < width; ++j) {
-          const point = new Point(i, j);
-          const closest = knn(point, points, k);
+    const numPixels = height * width;
 
-          const cls = classFromKnn(closest);
-          if(cls === "1") {
-            context.save();
-            context.globalAlpha = 2 * (1 / params.k);
-
-            context.translate(i, j);
-            context.fillStyle = classToColour[cls];
-            context.beginPath();
-            context.rect(0, 0, 1, 1);
-            context.fill();
-          }
-
-          context.restore();
-        }
-      }
-    }
-
-    quadtree.draw(context);
+    const id = context.createImageData(1, 1);
+    const d = id.data;
+    d[0] = 255;
+    d[1] = 0;
+    d[2] = 0;
+    d[3] = 255;
+    // d[3] = 2 * (1 / params.k);
     
-    points.forEach((p) => {
-      drawPoint(context, p);
-    });
+    // for(let k = params.k; k >= 1; k -= 1) {
+      //console.log(k);
+      for(let i = 0; i < numPixels; ++i) {
+        const x = i % width;
+        const y = Math.floor(i / width);
+        const point = new Point(x, y);
+        const closest = knn(point, points, params.k);
+        d[3] = 255 * proportion(closest)
+        context.putImageData(id, x, y);
+      }
+    //}
+
+//    for(let k = params.k; k >= 1; k -= 1) {
+//      console.log(k);
+//      for(let i = 0; i < height; ++i) {
+//        for(let j = 0; j < width; ++j) {
+//          const point = new Point(i, j);
+//          const closest = knn(point, points, k);
+//
+//          const cls = classFromKnn(closest);
+//          if(cls === "1") {
+//            context.save();
+//            context.globalAlpha = 2 * (1 / params.k);
+//
+//            context.translate(i, j);
+//            context.fillStyle = classToColour[cls];
+//            context.beginPath();
+//            context.rect(0, 0, 1, 1);
+//            context.fill();
+
+//          }
+//
+//          context.restore();
+//        }
+//      }
+//    }
+
+    // quadtree.draw(context);
+    
+    // points.forEach((p) => {
+    //   drawPoint(context, p);
+    // });
   };
 };
 
